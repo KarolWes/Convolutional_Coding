@@ -1,5 +1,7 @@
 from random import random
 
+G1 = [[1, 0, 0], [1, 0, 1]]
+G2 = [[1, 1, 1], [1, 0, 1]]
 
 def vec_to_poly(vec: []):
     return [i for i, bit in enumerate(vec) if bit == 1]
@@ -24,6 +26,14 @@ def zeros_refill(u: [], w: []):
     return u, w
 
 
+def zeros_refill_to_const(u: [], l: int):
+    if len(u) < l:
+        u += [0] * (l - len(u))
+    elif len(u) > l:
+        raise Exception("operation impossible to complete")
+    return u
+
+
 def num_to_bit_list(num: int, m: int):
     return list(map(int, bin(num)[2:].zfill(m)))
 
@@ -43,7 +53,11 @@ def chanel(data: [], p: float):
     return [bit if random() > p else bit ^ 1 for bit in data]
 
 
-def encoding(u: [], generator: [[], []]):
+def combine_bits(data: [list]):
+    return [data[i][j] for j in range(len(data[0])) for i in range(len(data))]
+
+
+def crc_encoder(u: [], generator: [list], ):
     u_d = vec_to_poly(u)
     v = []
     for gen in generator:
@@ -56,12 +70,14 @@ def encoding(u: [], generator: [[], []]):
                 maxi = max(val, maxi)
                 tmp.append(val)
         v.append(bitmask(tmp, maxi + 1))
-    v[0], v[1] = zeros_refill(v[0], v[1])
-    return v
+    return [zeros_refill_to_const(v_el, 2 * len(u)) for v_el in v]
 
 
-def decoding(v: [[], []], generator: [[], []]):
-    for i in range(2):
+def crc_decoder(v: [list], generator: [list]):
+    if len(v) != len(generator):
+        raise Exception("values are not coherent")
+    size = len(v)
+    for i in range(size):
         v_d = sorted(vec_to_poly(v[i]), reverse=True)
         v_tmp = v[i]
         gen = sorted(vec_to_poly(generator[i]), reverse=True)
@@ -73,10 +89,11 @@ def decoding(v: [[], []], generator: [[], []]):
             correction = bitmask([val + x for x in gen], org_size)
             v_tmp = [v_tmp[i] ^ correction[i] for i in range(org_size)]
             v_d = sorted(vec_to_poly(v_tmp), reverse=True)
+            # TODO return rest if polynomials are not dividable
         return res
 
 
-def generate_trellis(generator: [], m=2):
+def generate_trellis(generator: [list], m=2):
     trellis = {}  # key is state, values are [(state if 0, output), (state if 1, output)]
     reverse_trellis = {}
     for num in range(2 ** m):
@@ -86,16 +103,8 @@ def generate_trellis(generator: [], m=2):
 
         trellis[(*state,)] = []
         for new in range(2):
-            memory = [new] + state
-            res1 = 0
-            res2 = 0
-            for i in range(m + 1):
-                res1 += memory[i] * generator[0][i]
-                res2 += memory[i] * generator[1][i]
-            res1 %= 2
-            res2 %= 2
-            memory = memory[:-1]
-            trellis[(*state,)].append(((*memory,), [res1, res2]))
+            res, memory = convolutional_encoder(new, generator, state)
+            trellis[(*state,)].append(((*memory,), res))
             reverse_trellis[bit_list_to_num(memory)].append(num)
     return trellis, reverse_trellis
 
@@ -109,7 +118,27 @@ def hamming_distance(u, w):
     return res
 
 
-def viterbi(v: [[], []], trellis, reverse_trellis, start_state=(0, 0)):
+def convolutional_encoder_base(u: [int], generator: [list], start_state=[0, 0]):
+    v = [[] for _ in range(len(generator))]
+    memory = start_state
+    for el_u in u:
+        res, memory = convolutional_encoder(el_u, generator, memory)
+        for i in range(len(res)):
+            v[i].append(res[i])
+    return v
+
+
+def convolutional_encoder(bit: int, generator: [list], start_state=[0, 0]):
+    m = len(start_state)
+    memory = [bit] + start_state
+    res = [0] * len(generator)
+    for i in range(m + 1):
+        for j in range(len(generator)):
+            res[j] += memory[i] * generator[j][i]
+    return [x % 2 for x in res], memory[:-1]
+
+
+def viterbi(v: [list], trellis, reverse_trellis, start_state=(0, 0)):
     node_matrix = []
     mem = len(v)
     code_length = len(v[0])
@@ -136,41 +165,39 @@ def viterbi(v: [[], []], trellis, reverse_trellis, start_state=(0, 0)):
 
     path = [next]
 
-    print(code_length)
     for i in range(-2, -code_length - 2, -1):
         up = reverse_trellis[next][0]
         down = reverse_trellis[next][1]
         next = up if node_matrix[i][up] <= best_val else down
-        if node_matrix[i][up] < best_val:
-            # TODO correction
-            pass
         best_val = node_matrix[i][next]
-        path = [next]+path
+        path = [next] + path
 
     start = (*num_to_bit_list(path[0], mem),)
-    res = [[],[]]
+    corrected_stream = [[] for _ in range(len(v))]
+    decoded_stream = []
     for el in path[1:]:
         bit_el = (*num_to_bit_list(el, mem),)
         val = trellis[start][0][1] if trellis[start][0][0] == bit_el else trellis[start][1][1]
+        decoded_stream.append(0 if trellis[start][0][0] == bit_el else 1)
         start = bit_el
-        print(val)
-        res[0].append(val[0])
-        res[1].append(val[1])
-
-    return res
+        for i in range(len(v)):
+            corrected_stream[i].append(val[i])
+    return corrected_stream, decoded_stream
 
 
 if __name__ == '__main__':
-    G1 = [[1, 0, 0], [1, 0, 1]]
-    G2 = [[1, 1, 1], [1, 0, 1]]
 
-    data = generate_input(10)
-    print(data)
-    print(chanel(data, .3))
-    print(decoding(encoding([0, 1, 1], G1), G1))
+    generator = G2
+    size = 30
+    p = .7
+    data = generate_input(size)
+    print(f"input = \t{data}")
+    encoded = convolutional_encoder_base(data, generator)
+    after_transmission = [chanel(v, p) for v in encoded]
+    tr, rev = generate_trellis(generator)
+    _, decoded = viterbi(after_transmission, trellis=tr, reverse_trellis=rev)
+    print(f"decoded = \t{decoded}")
+    print(hamming_distance(data, decoded))
 
-    tr, rev = generate_trellis([[1, 1, 1], [1, 0, 1]])
-
-    print(viterbi([[1, 1, 0, 0, 1, 0, 1], [1, 0, 0, 0, 1, 0, 1]], trellis=tr, reverse_trellis=rev))
 
     print("Coded by Karol Wesolowski")
