@@ -197,24 +197,23 @@ if __name__ == '__main__':
 
     for G, generator in generators.items():
         tr, rev = generate_trellis(generator)
-        for prob in range (1,100):
-            p = prob/100
+        for prob in range(1, 100):
+            p = prob / 100
             ber = []
             for _ in range(1000):
                 data = generate_input(size)
                 encoded = convolutional_encoder_base(data, generator)
                 after_transmission = [chanel(v, p) for v in encoded]
                 _, decoded = viterbi(after_transmission, trellis=tr, reverse_trellis=rev)
-                ber.append(hamming_distance(data, decoded)/size)
-            ber_val = mean(ber)
+                ber.append(hamming_distance(data, decoded))
+            ber_val = sum(ber) / (1000 * size)
             print([G, p, ber_val])
             res.append([G, p, ber_val])
     res = pd.DataFrame(res)
     res.columns = ['generator', 'probability', 'BER']
-    sns.lineplot(res, x="probability", y="BER", hue="generator")
-    plt.savefig("graph.png")
+    sns.lineplot(data=res, x="probability", y="BER", hue="generator")
+    plt.savefig("new_graph.png")
     plt.show()
     print(res)
-
 
     print("Coded by Karol Wesolowski")
