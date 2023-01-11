@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from statistics import mean
+from commpy.channelcoding import Trellis
 
 
 def vec_to_poly(vec: []):
@@ -12,6 +13,10 @@ def vec_to_poly(vec: []):
 
 def poly_to_vec(poly: []):
     return [1 if i in poly else 0 for i in range(max(poly) + 1)]
+
+
+def list_to_oct(vec: [], m=2):
+    return int(oct(int("".join(list(map(str, reversed(vec)))), 2))[2:].zfill(2))
 
 
 def bitmask(vec: [], size: int):
@@ -112,6 +117,17 @@ def generate_trellis(generator: [list], m=2):
     return trellis, reverse_trellis
 
 
+def visualize_trellis(generator: [list], m=2):
+    tmp = []
+    for gen in generator:
+        tmp.append(list_to_oct(gen))
+    g_matrix = np.array([tmp])
+    trellis = Trellis(np.array([m]), g_matrix)
+    bit_colors = ['#FFFF00', '#0000FF']
+    trellis.visualize(3, [0, 2, 1, 3],
+                      edge_colors=bit_colors)
+
+
 def hamming_distance(u, w):
     u, w = zeros_refill(u, w)
     res = 0
@@ -194,9 +210,9 @@ if __name__ == '__main__':
     size = 30
     generators = {'G1': G1, 'G2': G2}
     res = []
-
     for G, generator in generators.items():
         tr, rev = generate_trellis(generator)
+        visualize_trellis(generator)
         for prob in range(1, 100):
             p = prob / 100
             ber = []
