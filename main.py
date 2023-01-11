@@ -227,7 +227,8 @@ if __name__ == '__main__':
             res.append([G, p, ber_val])
     res = pd.DataFrame(res)
     res.columns = ['generator', 'probability', 'BER']
-    sns.lineplot(data=res, x="probability", y="BER", hue="generator")
+    fig = sns.lineplot(data=res, x="probability", y="BER", hue="generator")
+    fig.set_yscale('log')
     plt.savefig("new_graph.png")
     plt.show()
     print(res)
